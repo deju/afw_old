@@ -1,0 +1,30 @@
+#coding=utf-8
+
+from email.mime.text import MIMEText
+from email.mime.multipart import MIMEMultipart
+import smtplib
+
+afewords_admin = 'afewords@afewords.com'
+
+def send_mail(to, subject, html_con):
+    msg = MIMEMultipart('alternative')
+    msg['Subject'] = subject
+    msg['From'] = afewords_admin
+    msg['To'] = to
+
+    part_html = MIMEText(html_con,_subtype='html', _charset='utf-8')
+    #part_text = MIMEText(text_con,'plain')
+    #msg.attach(part_text)
+    msg.attach(part_html)
+
+    s = smtplib.SMTP('localhost')
+    try:
+		print s.sendmail(afewords_admin, to, msg.as_string())
+		print s.getreply()
+    except smtplib.SMTPException, e:
+        print 'SMTPException'
+        s.quit()
+        return None
+    else:
+        return True
+    

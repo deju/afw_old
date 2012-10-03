@@ -1,0 +1,119 @@
+#coding=utf-8
+import tornado.web
+import bson
+import functools
+import urlparse
+import urllib
+from user import User
+from af_front.base.Base import create_vertify_code
+
+class BaseHandler(tornado.web.RequestHandler):
+    def get_current_user(self):
+        usr_id = self.get_cookie("user", None)
+        if usr_id is None:
+            return None
+        try:
+            usr = User(_id=usr_id)
+        except Exception, e:
+            usr = None
+        return usr
+    
+    def get(self):
+        return self.redirect("/")
+        
+    def post(self):
+        return self.redirect("/")
+
+class CodeHandler(BaseHandler):
+    def get(self):
+        ''' create vertify code  '''
+        self.set_header('Content-Type','image/gif')
+        [buf,code] = create_vertify_code()
+        self.set_cookie('ver_code',code.lower())
+        self.write(buf)
+        return
+
+
+class BaseUser(object):
+    def __init__(self, user):
+        self.name = user.name
+        self.sex = user.sex      
+        self._id = user._id     
+        tmp_avatar = user.avatar
+        self.avatar = tmp_avatar.file_name
+        self.thumb = tmp_avatar.thumb_name
+
+    def get_base(self, user):
+        self.email = user.email
+        self.password = user.password
+        self.token = user.token
+
+    def get_about(self, user):
+        tmp_about = user.about
+        self.about_body = tmp_about.body
+        self.about_view_body = tmp_about.view_body
+
+    def get_about_lib(self, user):
+        tmp_about = user.about
+        self.about_img_lib = tmp_about
+
+    def get_drafts(self, user):
+        tmp_draft = user.drafts_lib.load_all()
+        self.drafts_lib = tmp_draft
+
+    def get_blog(self, user):
+        tmp_blog = user.blog
+        self.blog = tmp_blog
+
+    def get_follow(self, user):
+        self.follow = user.follow_user_lib
+
+    def get_like_lib(self, user):
+        self.like_lib = user.favorite_lib
+
+class SuperUser(BaseUser):
+    def __init__(self, user):
+        super(SuperUser, self).__init__(user)
+        super(SuperUser, self).get_drafts(user)
+        super(SuperUser, self).get_base(user)
+
+
+
+def authfilter(method):
+    @functools.wraps(method)
+    def wrapper(self, *args, **kwargs):
+        if self.current_user is None:
+            if self.request.method in ("GET", "POST"):  
+                url = self.get_login_url()
+                if "?" not in url:
+                    if urlparse.urlsplit(url).scheme:
+                        next_url = self.request.full_url()
+                    else:
+                        next_url = self.request.uri
+                    url += "?" + urllib.urlencode(dict(next=next_url))
+                self.redirect(url)
+                return
+            raise HTTPError(403)
+        return method(self, *args, **kwargs)
+    return wrapper
+
+
+class ErrorHandler(BaseHandler):
+    def __init__(self, application, request, status_code):
+        print 'error init'
+        tornado.web.RequestHandler.__init__(self, application, request)
+        self.set_status(status_code)
+
+    def get_error_html(self, status_code, **kwargs):
+        #self.require_setting("static_path")
+        if status_code in [403, 404, 500, 503]:
+            self.render("error.html", title='子曰--出错了', user=self.current_user, code=status_code)
+            return
+    
+    def prepare(self):
+        raise tornado.web.HTTPError(self._status_code)
+    
+    def get(self):
+        self.render("error.html", title='子曰--出错了', user=self.current_user, code=status_code)
+
+tornado.web.ErrorHandler = ErrorHandler
